@@ -1,0 +1,51 @@
+Screen {
+    background: #17151F;
+    color: #FFFFFF;
+}
+
+Header {
+    background: #252136;
+    color: #03FDC7;
+}
+
+Footer {
+    background: #252136;
+    color: #B9B4C9;
+}
+
+DataTable {
+    height: 1fr;
+    border: round #514965;
+}
+
+DataTable > .datatable--cursor {
+    background: #03FDC7 25%;
+    color: #FFFFFF;
+}
+
+Static, Input, Button {
+    margin: 1 2;
+}
+
+.status {
+    color: #A78BFA;
+    height: auto;
+}
+
+.hidden {
+    display: none;
+}
+
+ModalScreen {
+    align: center middle;
+}
+
+.modal {
+    width: 80%;
+    height: auto;
+    max-height: 80%;
+    padding: 1 2;
+    border: round #514965;
+    background: #252136;
+}
+

@@ -1,0 +1,49 @@
+{
+  "app": {
+    "name": "DiskHawk",
+    "version": "1.0.0"
+  },
+  "created_at": "2026-10-28T16:16:06.382323+00:00",
+  "docker": {
+    "cli_available": true,
+    "state": "not_queried"
+  },
+  "error_count": 0,
+  "filesystems": [
+    {
+      "available_bytes": 349289521152,
+      "mount_point": "/",
+      "total_bytes": 494332366848,
+      "usage_percent": 2.76,
+      "used_bytes": 13659852800
+    }
+  ],
+  "platform": {
+    "architecture": "arm64",
+    "python": "3.15.0",
+    "release": "27.0.0",
+    "system": "macOS"
+  },
+  "scan": {
+    "aggregate_logical_bytes": 63956449,
+    "complete": true,
+    "depth_limited": false,
+    "directories_visited": 542,
+    "errors": 0,
+    "files_visited": 3543
+  },
+  "schema_version": 1,
+  "settings": {
+    "color": "auto",
+    "compact_tables": false,
+    "docker_enabled": true,
+    "exclude_pattern_count": 0,
+    "report_directory": null,
+    "report_format": "text",
+    "schema_version": 1,
+    "top": 20,
+    "warning_threshold_percent": 90
+  },
+  "warning_count": 0,
+  "warnings": []
+}

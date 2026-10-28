@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diskhawk"
+version = "1.0.0"
+description = "Local-first disk usage diagnostics for macOS"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "platformdirs>=4.3,<6",
+  "rich>=13.9,<15",
+  "textual>=0.89,<7",
+  "typer>=0.15,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+diskhawk = "diskhawk.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+diskhawk = ["shell_integration/*.zsh", "shell_integration/*.bash", "tui/*.tcss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+branch = true
+source = ["diskhawk.core", "diskhawk.config", "diskhawk.utils.privacy"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+

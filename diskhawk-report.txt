@@ -1,0 +1,8 @@
+DiskHawk diagnostic report
+Created: 2026-10-28T16:18:54.989559+00:00
+Platform: macOS 27.0.0 (arm64)
+Filesystems:
+  /: 325.3 GiB available of 460.4 GiB (2.8% used)
+Docker CLI: available; usage not queried.
+Warnings: 0 · Errors: 0
+Privacy: home paths are shortened; file names are excluded unless explicitly requested.
