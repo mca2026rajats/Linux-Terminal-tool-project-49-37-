@@ -160,6 +160,26 @@ def test_scanner_hardlinks_and_progress(tmp_path: Path) -> None:
     assert progress == []
 
 
+def test_scanner_exposes_actual_progress_events(tmp_path: Path) -> None:
+    (tmp_path / "first").write_bytes(b"abc")
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "second").write_bytes(b"12345")
+    events = []
+
+    result = scan_directory(tmp_path, progress_event=events.append)
+
+    assert result.files_visited == 2
+    assert result.directories_visited == 2
+    assert events
+    assert events[0].current_path == tmp_path
+    assert events[0].files_visited == 0
+    assert events[-1].files_visited == 2
+    assert events[-1].directories_visited == 2
+    assert events[-1].current_path == nested / "second"
+    assert all(event.elapsed_seconds >= 0 for event in events)
+
+
 def test_scanner_cancellation_and_validation(tmp_path: Path) -> None:
     (tmp_path / "file").write_text("x")
     result = scan_directory(tmp_path, cancelled=lambda: True)
@@ -175,6 +195,20 @@ def test_scanner_cancellation_and_validation(tmp_path: Path) -> None:
         scan_directory("/")
 
 
+def test_scanner_turns_keyboard_interrupt_into_partial_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "diskhawk.core.scanner.os.scandir",
+        lambda path: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+    result = scan_directory(tmp_path)
+    assert not result.complete
+    assert result.files_visited == 0
+    assert result.directories_visited == 1
+    assert any("interrupted" in warning.casefold() for warning in result.warnings)
+
+
 def test_scanner_counts_filesystem_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     child = tmp_path / "locked"
     child.mkdir()
@@ -188,6 +222,19 @@ def test_scanner_counts_filesystem_errors(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr("diskhawk.core.scanner.os.scandir", failing_scandir)
     result = scan_directory(tmp_path)
     assert not result.complete
+    assert result.errors == 1
+
+
+def test_scanner_marks_an_unreadable_root_as_fatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "diskhawk.core.scanner.os.scandir",
+        lambda path: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    result = scan_directory(tmp_path)
+    assert not result.complete
+    assert result.root_error
     assert result.errors == 1
 
 

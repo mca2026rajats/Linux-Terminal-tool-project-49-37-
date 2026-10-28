@@ -8,8 +8,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
+from rich.live import Live
 
 from diskhawk import __version__
 from diskhawk.commands.shell import (
@@ -28,12 +27,17 @@ from diskhawk.core.disk_info import (
     supported_filesystems,
 )
 from diskhawk.core.docker_info import get_docker_usage
-from diskhawk.core.models import DiskHawkConfig
+from diskhawk.core.models import DiskHawkConfig, ScanSummary
 from diskhawk.core.phrase_router import Action, route_phrase, supported_phrases
 from diskhawk.core.reports import build_report, render_json, render_text
-from diskhawk.core.scanner import scan_directory
+from diskhawk.core.scanner import ProgressEventCallback, ScanProgress, scan_directory
 from diskhawk.core.size_format import format_bytes, parse_size
 from diskhawk.presentation.pixel_dashboard import dashboard_console, render_pixel_disk_info
+from diskhawk.presentation.scan_dashboard import (
+    LiveScanView,
+    render_scan_failure,
+    render_scan_results,
+)
 from diskhawk.theme import THEME
 
 app = typer.Typer(
@@ -185,42 +189,54 @@ def scan(
     if path.resolve(strict=False) == Path("/") and allow_root and sys.stdin.isatty():
         if not typer.confirm("Scanning / can take a long time. Continue?"):
             raise typer.Exit(2)
+    scan_console = dashboard_console(file=sys.stdout, color=config.color)
+
+    def run_scan(*, progress_event: ProgressEventCallback | None = None) -> ScanSummary:
+        return scan_directory(
+            path,
+            top=top or config.top,
+            min_size=minimum,
+            max_depth=max_depth,
+            exclude=(*config.exclude_patterns, *(exclude or ())),
+            allow_root=allow_root,
+            progress_event=progress_event,
+        )
+
     try:
         minimum = parse_size(min_size)
-        if console.is_terminal and not json_output:
-            with Progress(
-                SpinnerColumn(spinner_style="primary"),
-                TextColumn("{task.description}"),
-                console=console,
-                transient=True,
-            ) as progress:
-                task_id = progress.add_task("Scanning…", total=None)
-                result = scan_directory(
-                    path,
-                    top=top or config.top,
-                    min_size=minimum,
-                    max_depth=max_depth,
-                    exclude=(*config.exclude_patterns, *(exclude or ())),
-                    allow_root=allow_root,
-                    progress=lambda files, directories, errors: progress.update(
-                        task_id,
-                        description=(
-                            f"Scanning · {files} files · {directories} directories · "
-                            f"{errors} errors"
-                        ),
-                    ),
-                )
-        else:
-            result = scan_directory(
-                path,
-                top=top or config.top,
-                min_size=minimum,
-                max_depth=max_depth,
-                exclude=(*config.exclude_patterns, *(exclude or ())),
-                allow_root=allow_root,
+        if scan_console.is_terminal and not json_output:
+            scan_root = path.expanduser().resolve(strict=False)
+            live_view = LiveScanView(
+                ScanProgress(0, 0, 0, scan_root, 0.0),
+                scan_root=scan_root,
             )
-    except (OSError, ValueError) as exc:
-        typer.echo(f"Scan error: {exc}", err=True)
+            live = Live(
+                live_view,
+                console=scan_console,
+                transient=True,
+                refresh_per_second=8,
+            )
+            live_started = False
+
+            def update_live(progress: ScanProgress) -> None:
+                nonlocal live_started
+                live_view.update(progress)
+                if not live_started:
+                    live.start()
+                    live_started = True
+
+            try:
+                result = run_scan(progress_event=update_live)
+            finally:
+                if live_started:
+                    live.stop()
+        else:
+            result = run_scan()
+    except (OSError, ValueError, RuntimeError) as exc:
+        if json_output:
+            typer.echo(f"Scan error: {exc}", err=True)
+        else:
+            render_scan_failure(path, exc, console=scan_console)
         raise typer.Exit(2) from exc
     if json_output:
         typer.echo(
@@ -249,28 +265,7 @@ def scan(
             )
         )
     else:
-        console.print(f"[primary]DiskHawk / Directory Scan[/primary]\nPath: {result.root}")
-        console.print(f"Status: {'COMPLETE' if result.complete else 'PARTIAL'}")
-        table = Table(title="Largest items")
-        table.add_column("Type")
-        table.add_column("Logical size", justify="right")
-        table.add_column("Allocated est.", justify="right")
-        table.add_column("Path")
-        for entry in result.top_entries:
-            table.add_row(
-                entry.entry_type.upper(),
-                format_bytes(entry.logical_bytes),
-                format_bytes(entry.allocated_bytes),
-                entry.relative_path,
-            )
-        console.print(table)
-        console.print(
-            f"Visited: {result.files_visited} files · {result.directories_visited} directories · "
-            f"{result.errors} inaccessible · {result.duration_seconds:.2f} s"
-        )
-        console.print("Directory sizes are estimates and may not equal reclaimable disk space.")
-        for warning in result.warnings:
-            console.print(f"[warning]Warning:[/warning] {warning}")
+        render_scan_results(result, console=scan_console)
     if not result.complete:
         raise typer.Exit(3)
 

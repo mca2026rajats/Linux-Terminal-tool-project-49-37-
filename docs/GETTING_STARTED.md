@@ -119,9 +119,16 @@ diskhawk scan . --exclude '*.cache' //fix
 diskhawk scan . --json
 ```
 
+In an interactive terminal, `diskhawk scan` shows a live pixel-art scan panel
+with actual file/directory counts, elapsed time, inaccessible paths, and current
+path. It does not estimate a completion percentage. Afterward, the results
+dashboard lists the largest items by logical size. Redirected and JSON output
+remain static; JSON output keeps its existing structure. Scanning `/` or a
+mounted filesystem root is labeled separately from an ordinary directory scan.
+
 The scan is read-only and does not follow symbolic links. Hidden files and
 directories such as `.git` are included unless excluded. Logical sizes and
-allocated-size estimates are useful for diagnosis but are no t guarantees of
+allocated-size estimates are useful for diagnosis but are not guarantees of
 reclaimable space. Incomplete scans report partial results and return exit code
 3. DiskHawk refuses to scan `/` without `--allow-root`; in a terminal it also
 asks you to confirm.

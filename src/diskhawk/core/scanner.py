@@ -6,12 +6,25 @@ import os
 import stat
 import time
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from diskhawk.core.models import ScanEntry, ScanSummary
 
 ProgressCallback = Callable[[int, int, int], None]
+
+
+@dataclass(frozen=True)
+class ScanProgress:
+    files_visited: int
+    directories_visited: int
+    errors: int
+    current_path: Path
+    elapsed_seconds: float
+
+
+ProgressEventCallback = Callable[[ScanProgress], None]
 
 
 class ScanCancelled(Exception):
@@ -36,6 +49,7 @@ def scan_directory(
     allow_root: bool = False,
     cancelled: Callable[[], bool] | None = None,
     progress: ProgressCallback | None = None,
+    progress_event: ProgressEventCallback | None = None,
 ) -> ScanSummary:
     if top < 1:
         raise ValueError("top must be a positive integer")
@@ -59,6 +73,7 @@ def scan_directory(
     total_logical_bytes = 0
     complete = True
     depth_limited = False
+    root_error = False
     warnings: list[str] = []
     dir_sizes: dict[str, list[int | None]] = {".": [0, 0]}
     dir_depth: dict[str, int] = {".": 0}
@@ -66,6 +81,18 @@ def scan_directory(
     serial = 0
     seen_inodes: set[tuple[int, int]] = set()
     stack: list[tuple[Path, str, int]] = [(root, ".", 0)]
+
+    def report_progress(current_path: Path) -> None:
+        if progress_event is not None:
+            progress_event(
+                ScanProgress(
+                    files_visited=files,
+                    directories_visited=directories,
+                    errors=errors,
+                    current_path=current_path,
+                    elapsed_seconds=max(0.0, time.monotonic() - clock),
+                )
+            )
 
     def add_top(entry: ScanEntry) -> None:
         nonlocal serial
@@ -85,11 +112,15 @@ def scan_directory(
                 warnings.append("Scan cancelled; displayed sizes are partial.")
                 break
             directory, relative_dir, depth = stack.pop()
+            report_progress(directory)
             try:
                 children = list(os.scandir(directory))
             except OSError:
                 errors += 1
                 complete = False
+                if relative_dir == ".":
+                    root_error = True
+                report_progress(directory)
                 continue
             children.sort(key=lambda entry: entry.name.casefold())
             pending_dirs: list[tuple[Path, str, int]] = []
@@ -109,6 +140,8 @@ def scan_directory(
                 except OSError:
                     errors += 1
                     complete = False
+                    report_progress(Path(child.path))
+                    report_progress(Path(child.path))
                     continue
                 if stat.S_ISDIR(info.st_mode):
                     directories += 1
@@ -150,6 +183,7 @@ def scan_directory(
                             break
                         parent = str(Path(parent).parent)
                     add_top(ScanEntry(relative, "file", logical, allocated_bytes, depth + 1))
+                report_progress(Path(child.path))
                 if progress is not None and (files + directories) % 100 == 0:
                     progress(files, directories, errors)
             stack.extend(reversed(pending_dirs))
@@ -186,4 +220,5 @@ def scan_directory(
         total_logical_bytes=total_logical_bytes,
         top_entries=entries,
         warnings=tuple(warnings),
+        root_error=root_error,
     )

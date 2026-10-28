@@ -9,6 +9,8 @@ from rich.console import Console
 from diskhawk.core.disk_activity import DiskActivity
 from diskhawk.core.models import FilesystemInfo
 from diskhawk.presentation.pixel_dashboard import (
+    _activity_panel,
+    _filesystem_panel,
     _format_throughput,
     dashboard_console,
     render_pixel_disk_info,
@@ -146,25 +148,23 @@ def test_activity_panel_aligns_with_dashboard_at_supported_widths(width: int) ->
 
 
 def test_activity_labels_use_mint_and_purple() -> None:
-    output = StringIO()
     console = Console(
-        file=output,
+        file=StringIO(),
         width=100,
         force_terminal=True,
         color_system="truecolor",
     )
-    render_pixel_disk_info(
-        [_filesystem()],
-        console=console,
-        activity=DiskActivity(1_000_000, 2_000_000, "Measured over 1.00 s."),
+    panel = _activity_panel(
+        DiskActivity(1_000_000, 2_000_000, "Measured over 1.00 s."),
+        console,
     )
-    rendered = output.getvalue()
-    read_style, read_label = rendered.split("READ SPEED", maxsplit=1)
-    write_style, write_label = rendered.split("WRITE SPEED", maxsplit=1)
-    assert "\x1b[1;38;2;3;253;199" in read_style[-80:]
-    assert "\x1b[1;38;2;167;139;250" in write_style[-80:]
-    assert "1.00 MB/s" in read_label
-    assert "2.00 MB/s" in write_label
+    segments = console.render(panel, console.options)
+    read_segment = next(segment for segment in segments if "READ SPEED" in segment.text)
+    write_segment = next(segment for segment in segments if "WRITE SPEED" in segment.text)
+    read_color = read_segment.style.color.get_truecolor()
+    write_color = write_segment.style.color.get_truecolor()
+    assert (read_color.red, read_color.green, read_color.blue) == (3, 253, 199)
+    assert (write_color.red, write_color.green, write_color.blue) == (167, 139, 250)
 
 
 def test_throughput_formatting_uses_units_and_preserves_no_activity() -> None:
@@ -216,20 +216,24 @@ def test_dashboard_uses_specified_foreground_palette_without_background() -> Non
 
 
 def test_storage_bar_maps_used_to_mint_and_available_to_purple() -> None:
-    output = StringIO()
     console = Console(
-        file=output,
+        file=StringIO(),
         width=100,
         force_terminal=True,
         color_system="truecolor",
     )
-    render_pixel_disk_info(
-        [_filesystem(used=50 * 1024**3, available=50 * 1024**3)],
-        console=console,
+    panel = _filesystem_panel(
+        _filesystem(used=50 * 1024**3, available=50 * 1024**3),
+        90,
+        console,
     )
-    rendered = output.getvalue()
-    assert "\x1b[1;38;2;3;253;199;48;2;37;33;54m" + "█" * 16 in rendered
-    assert "\x1b[38;2;167;139;250;48;2;37;33;54m" + "░" * 16 in rendered
+    segments = console.render(panel, console.options)
+    used = next(segment for segment in segments if segment.text == "█" * 16)
+    available = next(segment for segment in segments if segment.text == "░" * 16)
+    used_color = used.style.color.get_truecolor()
+    available_color = available.style.color.get_truecolor()
+    assert (used_color.red, used_color.green, used_color.blue) == (3, 253, 199)
+    assert (available_color.red, available_color.green, available_color.blue) == (167, 139, 250)
 
 
 def test_dashboard_console_respects_no_color_and_term_dumb(monkeypatch) -> None:

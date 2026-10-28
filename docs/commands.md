@@ -12,12 +12,12 @@ requested optional integration unavailable.
 | `diskhawk info --include-network` | Include network mounts in the curated filesystem list. |
 | `diskhawk info --threshold 85` | Override the warning threshold (1–100%). |
 | `diskhawk info --json` | Emit filesystem raw byte values and stable JSON keys without waiting for live activity sampling. |
-| `diskhawk scan [PATH]` | Scan a directory (default `.`), without following symlinks. |
+| `diskhawk scan [PATH]` | Scan a directory (default `.`), without following symlinks; interactive terminals show live pixel-art progress and a results dashboard. |
 | `diskhawk scan PATH --top 20` | Return at most 20 largest individual files/directories. |
 | `diskhawk scan PATH --min-size 100MB` | Filter displayed entries; decimal `MB` and binary `MiB` units are accepted. |
 | `diskhawk scan PATH --max-depth 4` | Limit traversal depth; report marks totals partial/depth-limited. |
 | `diskhawk scan PATH --exclude '*.cache'` | Repeatable basename or relative-path glob exclusion. |
-| `diskhawk scan PATH --json` | Emit scan metadata and raw byte counts as JSON. |
+| `diskhawk scan PATH --json` | Emit scan metadata and raw byte counts as JSON without animation. |
 | `diskhawk scan / --allow-root` | Explicitly permit a root scan; interactive use asks for confirmation. |
 | `diskhawk docker` | Query read-only Docker system disk usage and active context. |
 | `diskhawk report` | Write a sanitized text report in the current directory. |

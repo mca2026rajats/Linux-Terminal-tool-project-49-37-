@@ -41,6 +41,7 @@ class ScanSummary:
     total_logical_bytes: int
     top_entries: tuple[ScanEntry, ...]
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    root_error: bool = False
 
 
 @dataclass(frozen=True)

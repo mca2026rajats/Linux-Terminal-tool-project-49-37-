@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from diskhawk.cli import app
 from diskhawk.core.disk_activity import DiskActivity
 from diskhawk.core.models import DiskHawkConfig, FilesystemInfo
+from diskhawk.core.scanner import scan_directory
+from diskhawk.presentation.scan_dashboard import LiveScanView
 
 runner = CliRunner()
 
@@ -107,6 +111,165 @@ def test_scan_json_and_errors(tmp_path: Path, monkeypatch) -> None:
     assert data["total_logical_bytes"] == 200
     assert data["entries"][0]["path"] == "large"
     assert runner.invoke(app, ["scan", str(tmp_path), "--top", "0"]).exit_code != 0
+
+
+def test_scan_human_output_uses_one_real_scan_and_results_dashboard(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "large file.bin").write_bytes(b"x" * 2048)
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    real_scan = scan_directory
+    calls = []
+
+    def scan_once(path, **kwargs):
+        calls.append(kwargs.get("progress_event"))
+        return real_scan(path, **kwargs)
+
+    monkeypatch.setattr("diskhawk.cli.scan_directory", scan_once)
+    result = runner.invoke(app, ["scan", str(tmp_path)])
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0] is None
+    assert "SCAN COMPLETE" in result.stdout
+    assert "FILES INSPECTED" in result.stdout
+    assert "LARGEST SPACE CONSUMERS" in result.stdout
+    assert "large file.bin" in result.stdout
+    assert "SCANNING" not in result.stdout
+    assert "\x1b[" not in result.stdout
+
+
+def test_scan_terminal_animation_receives_actual_progress_events(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "large.bin").write_bytes(b"x" * 10)
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    output = StringIO()
+    monkeypatch.setattr(
+        "diskhawk.cli.dashboard_console",
+        lambda **kwargs: Console(
+            file=output,
+            width=80,
+            force_terminal=True,
+        ),
+    )
+    live_views = []
+    live_sessions = []
+
+    class FakeLive:
+        def __init__(self, renderable, **kwargs) -> None:
+            self.renderable = renderable
+            self.started = False
+            self.stopped = False
+            live_views.append(renderable)
+            live_sessions.append(self)
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            self.stopped = True
+
+    monkeypatch.setattr("diskhawk.cli.Live", FakeLive)
+    result = runner.invoke(app, ["scan", str(tmp_path)])
+    assert result.exit_code == 0
+    assert len(live_views) == 1
+    live_view = live_views[0]
+    assert isinstance(live_view, LiveScanView)
+    assert live_sessions[0].started
+    assert live_sessions[0].stopped
+    assert live_view.progress.files_visited == 1
+    assert live_view.progress.current_path == tmp_path / "large.bin"
+    assert "SCAN COMPLETE" in output.getvalue()
+
+
+def test_scan_failed_input_renders_failure_state(tmp_path: Path, monkeypatch) -> None:
+    file_path = tmp_path / "not-a-directory"
+    file_path.write_text("data", encoding="utf-8")
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    result = runner.invoke(app, ["scan", str(file_path)])
+    assert result.exit_code == 2
+    assert "SCAN FAILED" in result.stdout
+    assert "Scan error:" not in result.stdout
+    assert "SCAN COMPLETE" not in result.stdout
+
+
+def test_scan_failure_before_work_does_not_start_animation(tmp_path: Path, monkeypatch) -> None:
+    file_path = tmp_path / "not-a-directory"
+    file_path.write_text("data", encoding="utf-8")
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    output = StringIO()
+    monkeypatch.setattr(
+        "diskhawk.cli.dashboard_console",
+        lambda **kwargs: Console(file=output, width=80, force_terminal=True),
+    )
+    live_sessions = []
+
+    class FakeLive:
+        def __init__(self, renderable, **kwargs) -> None:
+            self.started = False
+            live_sessions.append(self)
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr("diskhawk.cli.Live", FakeLive)
+    result = runner.invoke(app, ["scan", str(file_path)])
+    assert result.exit_code == 2
+    assert live_sessions and not live_sessions[0].started
+    assert "SCAN FAILED" in output.getvalue()
+
+
+def test_scan_interruption_is_not_reported_as_success(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "file").write_text("data", encoding="utf-8")
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    real_scan = scan_directory
+
+    def interrupted_scan(path, **kwargs):
+        return real_scan(path, cancelled=lambda: True)
+
+    monkeypatch.setattr("diskhawk.cli.scan_directory", interrupted_scan)
+    result = runner.invoke(app, ["scan", str(tmp_path)])
+    assert result.exit_code == 3
+    assert "SCAN INTERRUPTED" in result.stdout
+    assert "SCAN COMPLETE\n" not in result.stdout
+
+
+def test_keyboard_interrupt_stops_live_animation_and_reports_interrupted(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    output = StringIO()
+    monkeypatch.setattr(
+        "diskhawk.cli.dashboard_console",
+        lambda **kwargs: Console(file=output, width=80, force_terminal=True),
+    )
+    live_sessions = []
+
+    class FakeLive:
+        def __init__(self, renderable, **kwargs) -> None:
+            self.started = False
+            self.stopped = False
+            live_sessions.append(self)
+
+        def start(self):
+            self.started = True
+
+        def stop(self):
+            self.stopped = True
+
+    monkeypatch.setattr("diskhawk.cli.Live", FakeLive)
+    monkeypatch.setattr(
+        "diskhawk.core.scanner.os.scandir",
+        lambda path: (_ for _ in ()).throw(KeyboardInterrupt()),
+    )
+    result = runner.invoke(app, ["scan", str(tmp_path)])
+    assert result.exit_code == 3
+    assert live_sessions[0].started
+    assert live_sessions[0].stopped
+    assert "SCAN INTERRUPTED" in output.getvalue()
 
 
 def test_ask_routes_info_and_unknown(monkeypatch) -> None:
