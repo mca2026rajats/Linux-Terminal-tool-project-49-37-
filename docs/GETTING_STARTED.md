@@ -203,7 +203,7 @@ Write versioned JSON:
 ```bash
 diskhawk report --format json --output ./diskhawk-report.json
 ```
-
+ 
 Add aggregate information from an explicitly chosen folder:
 
 ```bash
