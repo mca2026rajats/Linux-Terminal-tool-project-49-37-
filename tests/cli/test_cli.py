@@ -6,6 +6,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from diskhawk.cli import app
+from diskhawk.core.disk_activity import DiskActivity
 from diskhawk.core.models import DiskHawkConfig, FilesystemInfo
 
 runner = CliRunner()
@@ -36,6 +37,65 @@ def test_info_json_uses_core_service(monkeypatch) -> None:
     data = json.loads(result.stdout)
     assert data["filesystems"][0]["available_bytes"] == 60
     assert "docker_cli_available" in data
+
+
+def test_info_default_uses_pixel_dashboard(monkeypatch) -> None:
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    monkeypatch.setattr(
+        "diskhawk.cli.sample_disk_activity",
+        lambda rows: DiskActivity(
+            1_250_000, 12_500, "Measured over 1.00 s; not benchmark performance."
+        ),
+    )
+    monkeypatch.setattr("diskhawk.cli.list_filesystems", lambda: [])
+    monkeypatch.setattr(
+        "diskhawk.cli.relevant_filesystems",
+        lambda mounts: [FilesystemInfo("/System/Volumes/Data", 100, 25, 70, 25, "/dev/disk7s1")],
+    )
+    result = runner.invoke(app, ["info"])
+    assert result.exit_code == 0
+    assert "PIXEL STORAGE TERMINAL" in result.stdout
+    assert "SPACE USED" in result.stdout
+    assert "SPACE FREE" in result.stdout
+    assert "TOTAL CAPACITY" in result.stdout
+    assert "disk7s1" in result.stdout
+    assert "HARDWARE HEALTH NOT ASSESSED" in result.stdout
+    assert "LIVE DISK ACTIVITY" in result.stdout
+    assert "1.25 MB/s" in result.stdout
+    assert "12.50 KB/s" in result.stdout
+    assert "\x1b[" not in result.stdout
+
+
+def test_info_json_does_not_wait_for_live_activity(monkeypatch) -> None:
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    monkeypatch.setattr(
+        "diskhawk.cli.sample_disk_activity",
+        lambda rows: (_ for _ in ()).throw(AssertionError("JSON output must not sample")),
+    )
+    monkeypatch.setattr("diskhawk.cli.list_filesystems", lambda: [])
+    monkeypatch.setattr(
+        "diskhawk.cli.relevant_filesystems",
+        lambda mounts: [FilesystemInfo("/", 100, 25, 70, 25, "/dev/disk7s1")],
+    )
+    result = runner.invoke(app, ["info", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["filesystems"][0]["used_bytes"] == 25
+
+
+def test_info_gracefully_rejects_invalid_dashboard_data(monkeypatch) -> None:
+    monkeypatch.setattr("diskhawk.cli._config", lambda: DiskHawkConfig())
+    monkeypatch.setattr(
+        "diskhawk.cli.sample_disk_activity",
+        lambda rows: DiskActivity(None, None, "N/A: mocked in CLI test"),
+    )
+    monkeypatch.setattr("diskhawk.cli.list_filesystems", lambda: [])
+    monkeypatch.setattr(
+        "diskhawk.cli.relevant_filesystems",
+        lambda mounts: [FilesystemInfo("/", 0, 0, 0, 0)],
+    )
+    result = runner.invoke(app, ["info"])
+    assert result.exit_code == 1
+    assert "Disk information unavailable" in result.output
 
 
 def test_scan_json_and_errors(tmp_path: Path, monkeypatch) -> None:

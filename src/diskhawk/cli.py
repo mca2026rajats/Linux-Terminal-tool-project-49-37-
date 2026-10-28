@@ -20,6 +20,7 @@ from diskhawk.commands.shell import (
 )
 from diskhawk.config.manager import load_config, save_config
 from diskhawk.config.profiles import export_profile, import_profile
+from diskhawk.core.disk_activity import sample_disk_activity
 from diskhawk.core.disk_info import (
     list_filesystems,
     platform_label,
@@ -27,11 +28,12 @@ from diskhawk.core.disk_info import (
     supported_filesystems,
 )
 from diskhawk.core.docker_info import get_docker_usage
-from diskhawk.core.models import DiskHawkConfig, FilesystemInfo
+from diskhawk.core.models import DiskHawkConfig
 from diskhawk.core.phrase_router import Action, route_phrase, supported_phrases
 from diskhawk.core.reports import build_report, render_json, render_text
 from diskhawk.core.scanner import scan_directory
-from diskhawk.core.size_format import format_bytes, parse_size, usage_meter
+from diskhawk.core.size_format import format_bytes, parse_size
+from diskhawk.presentation.pixel_dashboard import dashboard_console, render_pixel_disk_info
 from diskhawk.theme import THEME
 
 app = typer.Typer(
@@ -64,37 +66,6 @@ def _config() -> DiskHawkConfig:
     except ValueError as exc:
         typer.echo(f"Configuration error: {exc}", err=True)
         raise typer.Exit(1) from exc
-
-
-def _disk_table(
-    rows: list[FilesystemInfo],
-    threshold: int,
-    *,
-    compact: bool = False,
-) -> Table:
-    table = Table(
-        title=f"DiskHawk · {platform_label()}",
-        title_style="primary",
-        padding=(0, 0) if compact else (0, 1),
-        show_edge=not compact,
-    )
-    table.add_column("Mount point", style="metadata")
-    table.add_column("Total", justify="right")
-    table.add_column("Used", justify="right")
-    table.add_column("Available", justify="right")
-    table.add_column("Usage", justify="right", style="primary")
-    for row in rows:
-        usage = usage_meter(row.usage_percent)
-        if row.usage_percent >= threshold:
-            usage = f"[warning]{usage} · warning[/warning]"
-        table.add_row(
-            row.mount_point,
-            format_bytes(row.total_bytes),
-            format_bytes(row.used_bytes),
-            format_bytes(row.available_bytes),
-            usage,
-        )
-    return table
 
 
 @app.callback()
@@ -168,33 +139,24 @@ def info(
             )
         )
     else:
-        console.print(
-            _disk_table(
+        dashboard = dashboard_console(file=sys.stdout, color=config.color)
+        try:
+            render_pixel_disk_info(
                 rows,
-                threshold or config.warning_threshold_percent,
-                compact=config.compact_tables,
+                console=dashboard,
+                warning_threshold_percent=threshold or config.warning_threshold_percent,
+                activity=sample_disk_activity(rows),
+                view_note=(
+                    "MOUNT VIEW  Pseudo-filesystems are filtered; network mounts are shown only "
+                    "when requested. Mounted volumes may share APFS capacity; "
+                    "values are not additive."
+                    if all_filesystems or include_network
+                    else None
+                ),
             )
-        )
-        if all_filesystems or include_network:
-            console.print(
-                "Pseudo-filesystems are filtered; network mounts are shown only when requested."
-            )
-        console.print(
-            "Docker CLI: "
-            + (
-                "available; run `diskhawk docker` for usage."
-                if shutil.which("docker")
-                else "not installed."
-            )
-        )
-        for row in rows:
-            console.print(
-                f"{format_bytes(row.available_bytes)} available of "
-                f"{format_bytes(row.total_bytes)} on {row.mount_point}."
-            )
-            if row.usage_percent >= (threshold or config.warning_threshold_percent):
-                available = format_bytes(row.available_bytes)
-                console.print(f"Warning: {row.mount_point} has only {available} available.")
+        except ValueError as exc:
+            typer.echo(f"Disk information unavailable: {exc}", err=True)
+            raise typer.Exit(1) from exc
 
 
 @app.command()

@@ -7,11 +7,11 @@ requested optional integration unavailable.
 | Command | Purpose |
 |---|---|
 | `diskhawk` | Show concise command help. |
-| `diskhawk info` | Summarize startup, home, and current-directory filesystems without walking directories. |
+| `diskhawk info` | Show the pixel-art capacity dashboard and approximately one-second physical read/write throughput sample without walking directories. |
 | `diskhawk info --all` | List curated mounted filesystems; pseudo-filesystems are filtered. |
 | `diskhawk info --include-network` | Include network mounts in the curated filesystem list. |
 | `diskhawk info --threshold 85` | Override the warning threshold (1–100%). |
-| `diskhawk info --json` | Emit raw byte values and stable JSON keys. |
+| `diskhawk info --json` | Emit filesystem raw byte values and stable JSON keys without waiting for live activity sampling. |
 | `diskhawk scan [PATH]` | Scan a directory (default `.`), without following symlinks. |
 | `diskhawk scan PATH --top 20` | Return at most 20 largest individual files/directories. |
 | `diskhawk scan PATH --min-size 100MB` | Filter displayed entries; decimal `MB` and binary `MiB` units are accepted. |

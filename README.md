@@ -37,6 +37,10 @@ checkout after installation.
 
 ## Quick start
 
+`diskhawk info` displays a pixel-art storage dashboard with actual filesystem
+capacity, a usage bar, and a one-second macOS read/write throughput sample.
+`diskhawk info --json` remains available for scripts and skips activity sampling.
+
 ```bash
 diskhawk info
 diskhawk info --all

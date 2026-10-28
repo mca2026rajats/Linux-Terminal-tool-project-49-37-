@@ -66,14 +66,24 @@ run it directly as `./.venv/bin/diskhawk`.
 diskhawk info
 ```
 
-This reports capacity, used space, available space, and usage for the relevant
-filesystems. It does not recursively scan folders and does not query Docker.
+This displays the pixel-art capacity dashboard with filesystem volume/mount,
+used and available space, total capacity, percentages, and a segmented usage
+bar. It also samples separate physical disk read/write counters over about one
+second on macOS and shows the measured average throughput. This is not a
+benchmark; virtual or disk-image volumes and systems without accessible IOKit
+counters show `N/A` instead. These are physical-device totals, so activity from
+other volumes sharing the same device is included and is not attributed to an
+individual APFS mount. `diskhawk info` does not recursively scan folders or
+query Docker. The footer confirms the operation is read-only and that hardware
+health is not assessed.
 
 To emit JSON byte counts for another program:
 
 ```bash
 diskhawk info --json
 ```
+
+The JSON mode remains immediate and does not wait for a live activity sample.
 
 To view the curated mounted filesystem list:
 

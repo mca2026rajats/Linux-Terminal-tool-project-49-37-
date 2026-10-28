@@ -36,7 +36,7 @@ def test_exact_phrase_in_isolated_zsh(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "DiskHawk" in result.stdout
+    assert "DISKHAWK" in result.stdout
     assert "available" in result.stdout
 
 
@@ -64,5 +64,5 @@ def test_exact_phrase_in_isolated_bash(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "DiskHawk" in result.stdout
+    assert "DISKHAWK" in result.stdout
     assert "available" in result.stdout
