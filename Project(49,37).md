@@ -4,7 +4,7 @@
 
 **Team:** Rajat Sonar, Abhay Deshmukh  
 **Repository:** https://github.com/mca2026rajats/Linux-Terminal-tool-project-49-37-  
-**Python Library:** https://pypi.org/project/diskhawk/1.0.0/-
+**Python Library:** https://pypi.org/project/diskhawk/1.0.0/
 
 **Date:** 29-10-2026  
 
